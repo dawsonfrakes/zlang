@@ -6,6 +6,10 @@ Token :: struct {
 
     IDENTIFIER :: 131;
     INTEGER :: 132;
+
+    KEYWORD_PROC :: 148;
+
+    OPERATOR_ARROW :: 192;
   }
 
   offset: u32;
@@ -34,11 +38,13 @@ token_at :: (s: string, p: u32) -> Token {
   if p >= s.count return .{kind = .END_OF_INPUT, offset = p};
   if is_alpha(s[p]) || s[p] == #char "_" {
     while p < s.count && (is_alnum(s[p]) || s[p] == #char "_") p += 1;
-    return .{kind = .IDENTIFIER, offset = start, length = cast(u16) (p - start)};
+    ident := string.{count = p - start, data = s.data + start};
+    if ident == "proc" return .{kind = .KEYWORD_PROC, offset = start, length = cast(u16) (p - start)};
+    else return .{kind = .IDENTIFIER, offset = start, length = cast(u16) (p - start)};
   } else if is_digit(s[p]) {
     while p < s.count && is_digit(s[p]) p += 1;
     return .{kind = .INTEGER, offset = start, length = cast(u16) (p - start)};
-  } else if s[p] == #char ":" || s[p] == #char "(" || s[p] == #char ")" || s[p] == #char "[" || s[p] == #char "]" {
+  } else if s[p] == #char ":" || s[p] == #char "(" || s[p] == #char ")" || s[p] == #char "[" || s[p] == #char "]" || s[p] == #char "#" || s[p] == #char "." || s[p] == #char "," {
     p += 1;
     return .{kind = cast(Token.Kind) s[p - 1], offset = start, length = 1};
   } else if s[p] == #char "=" {
@@ -49,6 +55,10 @@ token_at :: (s: string, p: u32) -> Token {
     return .{kind = #char "+", offset = start, length = 1};
   } else if s[p] == #char "-" {
     p += 1;
+    if p < s.count && s[p] == #char ">" {
+      p += 1;
+      return .{kind = .OPERATOR_ARROW, offset = start, length = cast(u16) (p - start)};
+    }
     return .{kind = #char "-", offset = start, length = 1};
   } else if s[p] == #char "*" {
     p += 1;

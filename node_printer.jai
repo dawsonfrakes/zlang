@@ -36,5 +36,39 @@ print_node :: (node: *AST.Node, s: string, level := 0) {
     case .VARIABLE;
       variable := cast(*AST.Variable) node;
       print("%", string.{count = variable.identifier.length, data = s.data + variable.identifier.offset});
+    case .PROCEDURE_CALL;
+      call := cast(*AST.Procedure_Call) node;
+      print_node(call.procedure_expr, s);
+      print("(");
+      for call.arguments {
+        print_node(it, s);
+        if it_index != call.arguments.count - 1 print(", ");
+      }
+      print(")");
+    case .PROCEDURE;
+      proc := cast(*AST.Procedure) node;
+      print("(");
+      for proc.parameter_types {
+        print("%: ", proc.parameter_names[it_index]);
+        print_node(it, s);
+        if it_index != proc.parameter_types.count - 1 print(", ");
+      }
+      print(")");
+      if proc.return_type {
+        print(" -> ");
+        print_node(proc.return_type, s);
+      }
+      print(" #(callconv=");
+      if proc.callconv print_node(proc.callconv, s); else print(".DEFAULT");
+      print(", export=");
+      if proc.export print_node(proc.export, s); else print("false");
+      print(")");
+      for proc.body {
+        print("\n");
+        print_node(it, s, level + 1);
+      }
+    case .ENUM_LITERAL;
+      enum_literal := cast(*AST.Enum_Literal) node;
+      print(".%", string.{count = enum_literal.identifier.length, data = s.data + enum_literal.identifier.offset});
   }
 }

@@ -1,5 +1,17 @@
-WASM_PAGE_SIZE :: 64 * 1024
+;intrinsics :: import()
+
+WASM_PAGE_SIZE : (12 + 4) * 10 : 64 * 1024
 TEMPORARY_STORAGE_SIZE :: 16 * 1024
 
 permanent_storage: []u8
 temporary_storage: []u8
+
+;_start :: proc() #(callconv=.C, entry=true)
+;  page_count := 128
+;  previous_page_count := intrinsics.wasm_memory_grow(0, page_count)
+;  assert(previous_page_count >= 0)
+;  memory := (previous_page_count * WASM_PAGE_SIZE).([^]u8)[:page_count * WASM_PAGE_SIZE]
+;
+;  inflection := page_count * WASM_PAGE_SIZE - TEMPORARY_STORAGE_SIZE
+;  permanent_storage = memory[:inflection]
+;  temporary_storage = memory[inflection:]

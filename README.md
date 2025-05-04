@@ -3,5 +3,5 @@
 ## Compiling
 
 ```sh
-python zc.py your_main_file.z
+jai zc.jai - your_main_file.z
 ```

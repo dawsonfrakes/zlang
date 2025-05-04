@@ -1,2 +1,5 @@
 WASM_PAGE_SIZE :: 64 * 1024
 TEMPORARY_STORAGE_SIZE :: 16 * 1024
+
+permanent_storage: []u8
+temporary_storage: []u8

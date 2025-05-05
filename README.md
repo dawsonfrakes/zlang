@@ -3,7 +3,10 @@
 ## Compiling
 
 ```sh
-# coming soon.
+# repl
+python zc.py
+# or compile
+python zc.py your_main_file.z
 ```
 
 ## Example

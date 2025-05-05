@@ -1,0 +1,12 @@
+intrinsics :: import()
+
+WASM_PAGE_SIZE :: 64 * 1024
+TEMPORARY_STORAGE_SIZE :: 16 * 1024
+
+frame :: proc() #(callconv=.C, export=true)
+
+_start :: proc() #(callconv=.C, entry=true)
+  page_count := 128
+  previous_page_count := intrinsics.wasm_memory_grow(0, page_count)
+  assert(previous_page_count >= 0)
+  memory := (previous_page_count * WASM_PAGE_SIZE).([^]u8)[:page_count * WASM_PAGE_SIZE]

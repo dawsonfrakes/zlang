@@ -1,2 +1,0 @@
-($const WASM_PAGE_SIZE (* 64 1024))
-($const TEMPORARY_STORAGE_SIZE (* 16 1024))

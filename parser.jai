@@ -15,7 +15,7 @@ peek :: (p: *Parser, n := 1) -> Token {
 
 eat :: (p: *Parser, expect: Token.Kind) -> Token {
   token := token_at(p.src, p.pos);
-  assert(expect == token.kind, "Expected %, got %", expect, token.kind);
+  assert(expect == token.kind, "Expected %, got % (context: %)", expect, token.kind, string.{count = min(p.src.count - token.offset, token.length + 16 * 2), data = max(p.src.data, p.src.data + token.offset - 16)});
   p.pos = token.offset + token.length;
   return token;
 }
@@ -39,6 +39,8 @@ AST :: struct {
       PROCEDURE_CALL :: 7;
       PROCEDURE :: 8;
       ENUM_LITERAL :: 9;
+      BLOCK :: 10;
+      SLICE_OPERATOR :: 11;
     }
 
     kind := Kind.NODE;
@@ -102,13 +104,27 @@ AST :: struct {
     return_type: *Node;
     callconv: *Node;
     export: *Node;
-    body: [..]*Node;
+    block: *Node;
   }
 
   Enum_Literal :: struct {
     #as using base: Node;
     kind = .ENUM_LITERAL;
     identifier: Token;
+  }
+
+  Block :: struct {
+    #as using base: Node;
+    kind = .BLOCK;
+    child_nodes: [..]*Node;
+  }
+
+  Slice_Operator :: struct {
+    #as using base: Node;
+    kind = .SLICE_OPERATOR;
+    left: *Node;
+    start: *Node;
+    end: *Node;
   }
 }
 
@@ -119,10 +135,12 @@ parse_primary :: (p: *Parser) -> *AST.Node {
     return literal;
   } else if peek(p).kind == #char "[" {
     eat(p, #char "[");
+    is_many := peek(p).kind == #char "^";
+    if is_many eat(p, #char "^");
     eat(p, #char "]");
-    eat(p, .IDENTIFIER); // u8 assumed for now.
+    eat(p, .IDENTIFIER); // TODO(dfra): u8 assumed for now.
     type_inst := New(AST.Type_Instantiation);
-    type_inst.result = type_slice_u8;
+    type_inst.result = ifx is_many type_many_u8 else type_slice_u8;
     return type_inst;
   } else if peek(p).kind == .IDENTIFIER {
     variable := New(AST.Variable);
@@ -138,6 +156,60 @@ parse_primary :: (p: *Parser) -> *AST.Node {
   return null;
 }
 
+parse_postfix :: (p: *Parser, primary: *AST.Node) -> *AST.Node {
+  while peek(p).kind == .OPERATOR_CAST {
+    binary_operator := New(AST.Binary_Operator);
+    binary_operator.left = primary;
+    binary_operator.operator_ = eat(p, .OPERATOR_CAST);
+    binary_operator.right = parse_expression(p);
+    primary = binary_operator;
+    eat(p, #char ")");
+  }
+
+  while peek(p).kind == #char "." {
+    token := eat(p, #char ".");
+    binary_operator := New(AST.Binary_Operator);
+    binary_operator.left = primary;
+    binary_operator.operator_ = token;
+
+    right := New(AST.Variable);
+    right.identifier = eat(p, .IDENTIFIER);
+
+    binary_operator.right = right;
+    primary = binary_operator;
+  }
+
+  while peek(p).kind == #char "(" {
+    eat(p, #char "(");
+    call := New(AST.Procedure_Call);
+    call.procedure_expr = primary;
+    primary = call;
+    while peek(p).kind != #char ")" {
+      array_add(*call.arguments, parse_expression(p));
+      if peek(p).kind != #char "," break;
+      eat(p, #char ",");
+    }
+    eat(p, #char ")");
+  }
+
+  while peek(p).kind == #char "[" {
+    eat(p, #char "[");
+    slice := New(AST.Slice_Operator);
+    slice.left = primary;
+    if peek(p).kind != #char ":" {
+      slice.start = parse_expression(p);
+    }
+    eat(p, #char ":");
+    if peek(p).kind != #char "]" {
+      slice.end = parse_expression(p);
+    }
+    primary = slice;
+    eat(p, #char "]");
+  }
+
+  return primary;
+}
+
 parse_factor :: (p: *Parser) -> *AST.Node {
   if peek(p).kind == #char "(" {
     eat(p, #char "(");
@@ -145,16 +217,7 @@ parse_factor :: (p: *Parser) -> *AST.Node {
     eat(p, #char ")");
     return expression;
   } else {
-    primary := parse_primary(p);
-    while peek(p).kind == #char "(" {
-      eat(p, #char "(");
-      call := New(AST.Procedure_Call);
-      call.procedure_expr = primary;
-      primary = call;
-      while peek(p).kind != #char ")" array_add(*call.arguments, parse_expression(p));
-      eat(p, #char ")");
-    }
-    return primary;
+    return parse_primary(p);
   }
 }
 
@@ -179,12 +242,41 @@ parse_expression :: (p: *Parser) -> *AST.Node {
     binary_operator.right = parse_term(p);
     left = binary_operator;
   }
+  while peek(p).kind == #char "." || peek(p).kind == #char "(" || peek(p).kind == #char "[" || peek(p).kind == .OPERATOR_CAST {
+    left = parse_postfix(p, left);
+  }
   return left;
 }
 
-parse_declaration_or_expression :: (p: *Parser) -> *AST.Node {
+parse_reassignment :: (p: *Parser) -> *AST.Node {
+  binary_operator := New(AST.Binary_Operator);
+  binary_operator.left = parse_factor(p); // TODO(dfra): parse just a variable.variable
+  binary_operator.operator_ = eat(p, #char "=");
+  binary_operator.right = parse_expression(p);
+  return binary_operator;
+}
+
+parse_declaration_or_reassignment_or_expression :: (p: *Parser) -> *AST.Node {
   if peek(p, 2).kind == #char ":" return parse_declaration(p);
+  else if peek(p, 2).kind == #char "=" return parse_reassignment(p);
   else return parse_expression(p);
+}
+
+parse_block :: (p: *Parser) -> *AST.Node {
+  block := New(AST.Block);
+  assert(peek(p).kind == .INDENT);
+  initial_indent := peek(p).length;
+  while peek(p).kind == .INDENT {
+    current_indent := peek(p).length;
+    if current_indent > initial_indent {
+      array_add(*block.child_nodes, parse_block(p));
+      continue;
+    }
+    if current_indent < initial_indent break;
+    eat(p, .INDENT);
+    array_add(*block.child_nodes, parse_declaration_or_reassignment_or_expression(p));
+  }
+  return block;
 }
 
 parse_procedure :: (p: *Parser) -> *AST.Node {
@@ -216,13 +308,7 @@ parse_procedure :: (p: *Parser) -> *AST.Node {
     }
     eat(p, #char ")");
   }
-  indent: int;
-  while peek(p).kind == .INDENT {
-    new_indent := eat(p, .INDENT).length;
-    defer indent = new_indent;
-    if new_indent < indent break;
-    array_add(*proc.body, parse_declaration_or_expression(p));
-  }
+  if peek(p).kind == .INDENT proc.block = parse_block(p);
   return proc;
 }
 

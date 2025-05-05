@@ -10,6 +10,7 @@ Token :: struct {
     KEYWORD_PROC :: 148;
 
     OPERATOR_ARROW :: 192;
+    OPERATOR_CAST :: 193;
   }
 
   offset: u32;
@@ -44,9 +45,16 @@ token_at :: (s: string, p: u32) -> Token {
   } else if is_digit(s[p]) {
     while p < s.count && is_digit(s[p]) p += 1;
     return .{kind = .INTEGER, offset = start, length = cast(u16) (p - start)};
-  } else if s[p] == #char ":" || s[p] == #char "(" || s[p] == #char ")" || s[p] == #char "[" || s[p] == #char "]" || s[p] == #char "#" || s[p] == #char "." || s[p] == #char "," {
+  } else if s[p] == #char ":" || s[p] == #char "(" || s[p] == #char ")" || s[p] == #char "[" || s[p] == #char "]" || s[p] == #char "#" || s[p] == #char "," || s[p] == #char "^" {
     p += 1;
     return .{kind = cast(Token.Kind) s[p - 1], offset = start, length = 1};
+  } else if s[p] == #char "." {
+    p += 1;
+    if p < s.count && s[p] == #char "(" {
+      p += 1;
+      return .{kind = .OPERATOR_CAST, offset = start, length = cast(u16) (p - start)};
+    }
+    return .{kind = #char ".", offset = start, length = 1};
   } else if s[p] == #char "=" {
     p += 1;
     return .{kind = #char "=", offset = start, length = 1};

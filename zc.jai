@@ -14,12 +14,14 @@ INTERPRETER :: true;
 
 type_u8: *Typespec.Type_;
 type_slice_u8: *Typespec.Type_;
+type_many_u8: *Typespec.Type_;
 
 args: []string;
 
 compile :: () {
   type_u8 = *(Typespec.Integer.{bits = 8, signed = false});
   type_slice_u8 = *(Typespec.Pointer.{pointer_kind = .SLICE, pointer_child = type_u8});
+  type_many_u8 = *(Typespec.Pointer.{pointer_kind = .MANY, pointer_child = type_u8});
 
   if args.count == 1 {
     print("Grrr! Provide me a file to compile! Like this: % your_main_file.z\n", ifx INTERPRETER "jai zc.jai -" else path_filename(args[0]));

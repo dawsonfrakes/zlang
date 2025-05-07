@@ -168,7 +168,7 @@ Typespec :: struct {
     ENUM_FLAGS :: 14;
     ENUM_LITERAL :: 15;
     STRUCT_LITERAL :: 16;
-    TYPEOF_NULL :: 17;
+    NULL :: 17;
   }
 
   kind: Kind;
@@ -181,23 +181,139 @@ Typespec :: struct {
       };
       child: *Typespec;
     };
+    as_integer: struct {
+      bits: u8;
+      signed: bool;
+    };
   };
 }
+
+type_code: *Typespec;
+type_comptime_int: *Typespec;
+type_u8: *Typespec;
+type_slice_u8: *Typespec;
 
 Value :: struct {
   Kind :: enum {
     EXP :: 0;
     TYPE :: 1;
+    PROCEDURE :: 2;
+    ENUM_LITERAL :: 3;
   }
 
+  type: *Typespec;
   kind: Kind;
   using data: union {
     as_exp: *Exp;
     as_type: *Typespec;
+    as_procedure: (args: [..]*Value) -> *Value;
+    as_enum_literal: string;
   };
 }
 
-Env :: Table(string, Value);
+Env :: struct {
+  parent: *Env;
+  using table: Table(string, Value);
+}
+
+env_find :: (env: *Env, symbol: string) -> *Value {
+  value := table_find_pointer(*env.table, symbol);
+  if value return value;
+  if env.parent return env_find(env.parent, symbol);
+  return null;
+}
+
+eval_exp :: (x: *Exp, env: *Env) -> *Value {
+  if #complete x.kind == {
+    case .SYMBOL;
+      if x.as_atom[0] == #char "." {
+        value := New(Value);
+        value.kind = .ENUM_LITERAL;
+        value.as_enum_literal = string.{count = x.as_atom.count - 1, data = x.as_atom.data + 1};
+        return value;
+      }
+      value := env_find(env, x.as_atom);
+      assert(value != null, "% is not in env", x.as_atom);
+      return value;
+    case .INTEGER;
+      value := New(Value);
+      value.type = type_comptime_int;
+      value.kind = .EXP;
+      value.as_exp = x;
+      return value;
+    case .FLOAT;
+      assert(false);
+      return null;
+    case .STRING;
+      value := New(Value);
+      value.type = type_slice_u8;
+      value.kind = .EXP;
+      value.as_exp = x;
+      return value;
+    case .LIST;
+      op, args := x.as_list[0], array_view(x.as_list, 1);
+      assert(op.kind == .SYMBOL);
+      if op.as_atom == "$define" {
+        assert(args.count == 2);
+        name_exp, value_exp := args[0], args[1];
+        name := eval_exp(name_exp, env);
+        assert(name.kind == .EXP && name.as_exp.kind == .SYMBOL);
+        assert(!table_find_pointer(*env.table, name.as_exp.as_atom));
+        table_add(*env.table, name.as_exp.as_atom, eval_exp(value_exp, env));
+        return eval_exp(parse_exp("($cast ($type .VOID) 0)", 0), env);
+      } else if op.as_atom == "$codeof" {
+        assert(args.count == 1);
+        exp := args[0];
+        value := New(Value);
+        value.type = type_code;
+        value.kind = .EXP;
+        value.as_exp = exp;
+        return value;
+      } else if op.as_atom == "$cast" {
+        assert(args.count == 2);
+        type_exp, value_exp := args[0], args[1];
+        type := eval_exp(type_exp, env);
+        assert(type.kind == .TYPE);
+        value := eval_exp(value_exp, env);
+        // assert(); // TODO(dfra): make sure these types are compatible
+        value.type = type.as_type;
+        return value;
+      } else if op.as_atom == "$type" {
+        assert(args.count <= 2);
+        kind_exp := args[0];
+        kind := eval_exp(kind_exp, env);
+        assert(kind.kind == .ENUM_LITERAL);
+        kind_literal := kind.as_enum_literal;
+        ts := New(Typespec);
+        names, values := enum_names(Typespec.Kind), enum_values_as_s64(Typespec.Kind);
+        kind_kind_kind := Typespec.Kind.TYPE;
+        for names if it == kind_literal kind_kind_kind = cast(Typespec.Kind) values[it_index];
+        ts.* = .{kind = kind_kind_kind};
+        value := New(Value);
+        value.kind = .TYPE;
+        value.as_type = ts;
+        return value;
+      } else {
+        proc := eval_exp(op, env);
+        assert(proc.kind == .PROCEDURE);
+        pargs: [..]*Value;
+        for args array_add(*pargs, eval_exp(it, env));
+        return proc.as_procedure(pargs);
+      }
+  }
+}
+
+print_value :: (value: *Value, s: string) {
+  if #complete value.kind == {
+    case .EXP; print_exp(value.as_exp, s);
+    case .TYPE;
+      print("($cast ($type .TYPE) %)", value.as_type);
+    case .PROCEDURE;
+      print("procedure");
+    case .ENUM_LITERAL;
+      print(".%", value.as_enum_literal);
+  }
+}
 
 args: []string;
 
@@ -213,13 +329,29 @@ do_compile :: () {
     exit(1);
   }
 
+  type_code = *(Typespec.{kind = .CODE});
+  type_comptime_int = *(Typespec.{kind = .COMPTIME_INTEGER});
+  type_u8 = *(Typespec.{kind = .INTEGER, as_integer = .{bits = 8, signed = false}});
+  type_slice_u8 = *(Typespec.{kind = .POINTER, as_pointer = .{kind = .SLICE, child = type_u8}});
+
+  default_env: Env;
+
+  env: Env;
+  env.parent = *default_env;
+
   // print("%", src);
   pos := 0;
   while true {
     exp, next_pos := parse_exp(src, pos);
     if !exp break;
     pos = next_pos;
-    print_exp(exp, src, show_kinds = false);
+    // print_exp(exp, src, show_kinds = false);
+    result := eval_exp(exp, *env);
+    for * env.table {
+      print("%: ", it_index);
+      print_value(it, src);
+      print("\n");
+    }
   }
 }
 

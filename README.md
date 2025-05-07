@@ -46,25 +46,18 @@ $using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, [
 
 ```wisp
 ; implemented
-$define name exp [#kind (.CONSTANT | .VARIABLE | .COMPILE_TIME)] [#flags (.HOISTED | .UNINITIALIZED | .ZEROED)]
+$define name exp [#kind (.CONSTANT | .VARIABLE)] [#flags (.HOISTED | .UNINITIALIZED | .ZEROED)]
 $operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
 $codeof exp ; alias: 'exp
 $insert string ...
 
 ; coming soon
-$proc name (...) return [#callconv .DEFAULT] [#flags (.ENTRY | .EXPORT)] ...body
+$proc name (...) return [#callconv .DEFAULT] [#flags (.ENTRY | .EXPORT | .VARARGS)] ...body
 $import string [#kind (.MODULE | .FILE)] [#lookup (.MODULES | .RELATIVE)]
 $type kind [initializer]
 $cast type value
 $typeof
-$using exp
-$rest
-$spread
-$return
-$for
 $if
-$switch
-$case
-$continue
-$break
+$loop condition ...
+$break [#flags (.CONTINUE | .RETURN)]
 ```

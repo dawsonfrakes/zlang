@@ -19,8 +19,10 @@ python zc.py your_main_file.z
 ## Example
 
 ```wisp
+($define using ($operator '. ($import "using") 'using))
+
 ; (note: stb-syntax module isn't special, you can write your own syntaxes using builtins)
-$using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
+using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
 
 :: intrinsics ($import "intrinsics")
 
@@ -30,7 +32,7 @@ $using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, [
 : permanent_storage []u8
 : temporary_storage []u8
 
-:: _start (proc () void #callconv .C
+:: _start (proc () void #callconv 'C
   :: page_count 128
   := previous_page_count (intrinsics.wasm-memory-grow 0 page_count)
   assert (>= previous_page_count 0)
@@ -46,18 +48,18 @@ $using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, [
 
 ```wisp
 ; implemented
-$define name exp [#kind (.CONSTANT | .VARIABLE)] [#flags (.HOISTED | .UNINITIALIZED | .ZEROED)]
+$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('HOISTED | 'UNINITIALIZED | 'ZEROED)]
 $operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
 $codeof exp ; alias: 'exp
-$insert string ...
+$insert string ... [#flags ('HOISTED)]
 
 ; coming soon
-$proc name (...) return [#callconv .DEFAULT] [#flags (.ENTRY | .EXPORT | .VARARGS)] ...body
-$import string [#kind (.MODULE | .FILE)] [#lookup (.MODULES | .RELATIVE)]
+$proc name (...) return [#callconv 'DEFAULT] [#flags ('HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
+$import string [#kind ('MODULE | 'FILE)] [#lookup ('MODULES | 'RELATIVE)]
 $type kind [initializer]
 $cast type value
 $typeof
 $if
 $loop condition ...
-$break [#flags (.CONTINUE | .RETURN)]
+$break [#flags ('CONTINUE | 'RETURN)]
 ```

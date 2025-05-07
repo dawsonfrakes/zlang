@@ -1,12 +1,19 @@
 # Z Programming Language
 
+## Big Ideas™
+
+- A statically typed Lisp-like systems programming language.
+- One level of implicit parentheses per line.
+- Small amount of builtins (they start with $).
+- Code is data, Types are data: pass around, modify, pass back.
+- Allow the user to create their own "standard library" without any external imports.
+- All programs can/should be freestanding.
+- Zero is initialization.
+
 ## Compiling
 
 ```sh
-# repl
-jai zc.jai
-# compile
-jai zc.jai - your_main_file.z
+python zc.py your_main_file.z
 ```
 
 ## Example
@@ -35,20 +42,14 @@ $using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, [
 )
 ```
 
-## Big Ideas™
-
-- A statically typed Lisp-like systems programming language.
-- One level of implicit parentheses per line.
-- Small amount of builtins (they start with $).
-- Code is data, Types are data: pass around, modify, pass back.
-- Allow the user to create their own "standard library" without any external imports.
-- All programs can/should be freestanding.
-- Zero is initialization.
-
 ## Builtins
 
 ```wisp
+; implemented
 $define name exp [#kind (.CONSTANT | .VARIABLE | .COMPILE_TIME)] [#flags (.HOISTED | .UNINITIALIZED | .ZEROED)]
+$codeof exp
+
+; coming soon
 $proc name (...) return [#callconv .DEFAULT] [#flags (.ENTRY | .EXPORT)] ...body
 $operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
 $import string [#kind (.MODULE | .FILE)] [#lookup (.MODULES | .RELATIVE)]
@@ -56,7 +57,6 @@ $type kind [initializer]
 $cast type value
 $typeof
 $using exp
-$codeof exp
 $insert string ...
 $rest
 $spread

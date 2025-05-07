@@ -9,20 +9,24 @@
 - Allow the user to create their own "standard library" without any external imports.
 - All programs can/should be freestanding.
 - Zero is initialization.
+- The user will be given the path to the compiler at compile time.
 
 ## Compiling
 
 ```sh
-python zc.py your_main_file.z
+# windows (Developer Command Prompt for Visual Studio)
+cl zc.c
+zc your_main_file.z
+# unix-y
+cc -o zc zc.c && ./zc your_main_file.z
 ```
 
 ## Example
 
 ```wisp
-($define using ($operator '. ($import "using") 'using))
-
 ; (note: stb-syntax module isn't special, you can write your own syntaxes using builtins)
-using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
+$define stb ($import "stb-syntax") ; using, ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
+using stb
 
 :: intrinsics ($import "intrinsics")
 
@@ -47,19 +51,27 @@ using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []
 ## Builtins
 
 ```wisp
-; implemented
-$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('HOISTED | 'UNINITIALIZED | 'ZEROED)]
-$operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
+; Declarations
+$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('PUBLIC | 'HOISTED | 'UNINITIALIZED | 'ZEROED)]
+$proc name params return [#callconv 'DEFAULT] [#flags ('PUBLIC | 'HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
+
+; Code modification
 $codeof exp ; alias: 'exp
 $insert string ... [#flags ('HOISTED)]
+$compiles exp
 
-; coming soon
-$proc name (...) return [#callconv 'DEFAULT] [#flags ('HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
-$import string [#kind ('MODULE | 'FILE)] [#lookup ('MODULES | 'RELATIVE)]
+; Type system
 $type kind [initializer]
 $cast type value
-$typeof
-$if
-$loop condition ...
-$break [#flags ('CONTINUE | 'RETURN)]
+$typeof exp
+
+; Control Flow
+$if test conseq [alt]
+$loop condition ... [#label exp]
+$goto [#label exp] [#result exp] [#kind ('BREAK | 'CONTINUE | 'RETURN)]
+
+; Misc
+$operator op ... ; op = "==", "<=", ">=", "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!.=<>"
+$import string [#kind ('MODULE | 'FILE)]
+$compiler ; compiler info struct (path, build target, command line, module paths, etc.)
 ```

@@ -307,11 +307,11 @@ print_value :: (value: *Value, s: string) {
   if #complete value.kind == {
     case .EXP; print_exp(value.as_exp, s);
     case .TYPE;
-      print("($cast ($type .TYPE) %)", value.as_type);
+      print("($cast ($type .TYPE) %)\n", value.as_type.*);
     case .PROCEDURE;
-      print("procedure");
+      print("procedure\n");
     case .ENUM_LITERAL;
-      print(".%", value.as_enum_literal);
+      print(".%\n", value.as_enum_literal);
   }
 }
 
@@ -347,11 +347,13 @@ do_compile :: () {
     pos = next_pos;
     // print_exp(exp, src, show_kinds = false);
     result := eval_exp(exp, *env);
-    for * env.table {
-      print("%: ", it_index);
-      print_value(it, src);
-      print("\n");
-    }
+    if result print_value(result, src);
+  }
+
+  for * env.table {
+    print("%: ", it_index);
+    print_value(it, src);
+    print("\n");
   }
 }
 

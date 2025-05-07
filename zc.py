@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 
 class Symbol(str):
   def __repr__(self): return self
@@ -78,10 +79,24 @@ class Type_Integer:
   bits: int
   signed: bool
 
+class Type_Pointer_Kind(IntEnum):
+  SINGLE = 0
+  MANY = 1
+  SLICE = 2
+
+@dataclass
+class Type_Pointer:
+  kind: Type_Pointer_Kind
+  child: "Type"
+
+Type = str | Type_Integer | Type_Pointer
+
 type_type = "type"
 type_code = "code"
 type_void = "void"
 type_comptime_int = "comptime_int"
+type_u8 = Type_Integer(bits=8, signed=False)
+type_slice_u8 = Type_Pointer(kind=Type_Pointer_Kind.SLICE, child=type_u8)
 
 class Value:
   def __init__(self):
@@ -114,6 +129,11 @@ def value_from_exp(x: Exp) -> Value:
     value.type_ = type_comptime_int
     value.value = x
     return value
+  if isinstance(x, String):
+    value = Value()
+    value.type_ = type_slice_u8
+    value.value = x
+    return value
   raise NotImplementedError(type(x), x)
 
 def cteval(x: Exp, env: Env, s: str) -> Value:
@@ -141,17 +161,19 @@ def cteval(x: Exp, env: Env, s: str) -> Value:
     assert len(args) >= 1
     format_exp, *rest = args
     format_ = cteval(format_exp, env, s)
-    assert isinstance(format_.value, String) #format_.type_ == type_slice_u8 and
+    assert format_.type_ == type_slice_u8
+    format_value = format_.as_str(s)
     rest_index = 0
     insert = ""
-    for i in range(len(format_.value)):
-      if format_.value[i] == '%':
+    for i in range(len(format_value)):
+      if format_value[i] == '%':
         insert += str(cteval(rest[rest_index], env, s).value)
         rest_index += 1
         continue
-      insert += format_.value[i]
+      insert += format_value[i]
     assert rest_index == len(rest)
-    insert_exp = parse(insert, 0)[0] # TODO: support multiple expressions?
+    insert_exp, next_pos = parse(insert, 0)
+    assert next_pos >= len(insert_exp) # TODO: support multiple expressions?
     return cteval(insert_exp, env, s)
   elif op == Symbol("$operator"):
     operator_exp, *rest = args

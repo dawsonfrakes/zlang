@@ -1,3 +1,7 @@
 $define 'WASM_PAGE_SIZE ($operator '* 64 1024)
 ; $define 'TEMPORARY_STORAGE_SIZE ($operator '* 16 1024)
 $define 'TEMPORARY_STORAGE_SIZE ($operator ($insert "%" ''*) 16 1024)
+
+$define 'x 25 #kind 'VARIABLE
+$operator '= 'x 10
+$define 'y ($operator '* x x)

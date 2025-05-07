@@ -4,8 +4,6 @@ from enum import IntEnum
 class Symbol(str):
   def __repr__(self): return self
 class Keyword(str):
-  def __repr__(self): return '.' + self
-class EnumLiteral(str):
   def __repr__(self): return '#' + self
 class String(str):
   def __repr__(self): return '"' + self + '"'
@@ -13,7 +11,7 @@ class Integer(int): pass
 class Float(float): pass
 class List(list):
   def __repr__(self): return "(" + " ".join(map(repr, self)) + ")"
-Atom = Symbol | Keyword | EnumLiteral | Integer | Float | String
+Atom = Symbol | Keyword | Integer | Float | String
 Exp = Atom | List
 
 def parse(s, p, first_exp_in_line=True) -> tuple[Exp, int]:
@@ -54,6 +52,9 @@ def parse(s, p, first_exp_in_line=True) -> tuple[Exp, int]:
       assert p < len(s) and s[p] == '\"'
       p += 1
       (stack[-1] if len(stack) > 0 else stack).append(String(s[start+1:p-1]))
+    elif s[p] == '#':
+      while p < len(s) and (not s[p].isspace() and s[p] != ')'): p += 1
+      (stack[-1] if len(stack) > 0 else stack).append(Keyword(s[start+1:p]))
     elif s[p] == "'":
       p += 1
       exp, next_pos = parse(s, p, first_exp_in_line=False)
@@ -134,6 +135,11 @@ def value_from_exp(x: Exp) -> Value:
     value.type_ = type_slice_u8
     value.value = x
     return value
+  if isinstance(x, Keyword):
+    value = Value()
+    value.type_ = type_code
+    value.value = x
+    return value
   raise NotImplementedError(type(x), x)
 
 def cteval(x: Exp, env: Env, s: str) -> Value:
@@ -145,11 +151,16 @@ def cteval(x: Exp, env: Env, s: str) -> Value:
     else: return value_from_exp(x)
   op, *args = x
   if op == Symbol("$define"):
-    name_exp, value_exp = args
+    name_exp, value_exp, *rest = args
+    constant = True
+    if len(rest) > 0 and cteval(rest[0], env, s).value == Keyword("kind"):
+      value = cteval(rest[1], env, s).value
+      assert value in [Symbol("CONSTANT"), Symbol("VARIABLE")]
+      constant = value == Symbol("CONSTANT")
     name = cteval(name_exp, env, s)
     assert name.type_ == type_code and isinstance(name.value, Symbol)
     assert name.value not in env.data
-    env.data[name.value] = {"constant": True, "value": cteval(value_exp, env, s)}
+    env.data[name.value] = {"constant": constant, "value": cteval(value_exp, env, s)}
     return value_void
   elif op == Symbol("$codeof"):
     assert len(args) == 1
@@ -179,8 +190,19 @@ def cteval(x: Exp, env: Env, s: str) -> Value:
     operator_exp, *rest = args
     operator = cteval(operator_exp, env, s)
     assert operator.type_ == type_code and isinstance(operator.value, Symbol)
+    if operator.value == Symbol("="):
+      assert len(rest) == 2
+      lhs_exp = cteval(rest[0], env, s)
+      assert lhs_exp.type_ == type_code and isinstance(lhs_exp.value, Symbol)
+      lhs_value = env.find(lhs_exp.value)
+      assert not lhs_value["constant"]
+      # TODO: typechecking
+      lhs_value["value"].value = cteval(rest[1], env, s).value
+      return value_void
     result = cteval(rest[0], env, s).value if len(rest) > 0 else 0
-    for arg_exp in rest[1:]: arg = cteval(arg_exp, env, s); result = eval(f"result {operator.value} {arg.value}")
+    for arg_exp in rest[1:]:
+      arg = cteval(arg_exp, env, s)
+      result = eval(f"result {operator.value} {arg.value}")
     return value_from_exp(Integer(result))
   else:
     proc = cteval(op, env, s)

@@ -1,1 +1,3 @@
-$define 'x 5
+$define 'WASM_PAGE_SIZE ($operator '* 64 1024)
+; $define 'TEMPORARY_STORAGE_SIZE ($operator '* 16 1024)
+$define 'TEMPORARY_STORAGE_SIZE ($operator ($insert '"%" ''*) 16 1024)

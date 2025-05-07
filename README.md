@@ -47,17 +47,17 @@ $using ($import "stb-syntax") ; ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, [
 ```wisp
 ; implemented
 $define name exp [#kind (.CONSTANT | .VARIABLE | .COMPILE_TIME)] [#flags (.HOISTED | .UNINITIALIZED | .ZEROED)]
-$codeof exp
+$operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
+$codeof exp ; alias: 'exp
+$insert string ...
 
 ; coming soon
 $proc name (...) return [#callconv .DEFAULT] [#flags (.ENTRY | .EXPORT)] ...body
-$operator op ... ; op = "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!"
 $import string [#kind (.MODULE | .FILE)] [#lookup (.MODULES | .RELATIVE)]
 $type kind [initializer]
 $cast type value
 $typeof
 $using exp
-$insert string ...
 $rest
 $spread
 $return

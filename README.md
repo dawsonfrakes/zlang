@@ -14,7 +14,10 @@
 ## Compiling
 
 ```sh
-odin run . -- your_main_file.z
+# repl
+python zc.py
+# compile
+python zc.py your_main_file.z
 ```
 
 ## Example

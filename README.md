@@ -52,12 +52,13 @@ $codeof exp ; alias: 'exp
 $if test conseq [alt]
 
 ; Partially Implemented
-$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('PUBLIC | 'HOISTED | 'UNINITIALIZED | 'ZEROED)]
+$define name exp [#flags ('PUBLIC | 'HOISTED)]
 $insert string ... [#flags ('HOISTED)]
 $operator op ... ; op = "==", "<=", ">=", "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!.=<>"
 
 ; Coming Soon
 $proc name params return [#callconv 'DEFAULT] [#flags ('PUBLIC | 'HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
+$block [#label exp] ...body
 $rest
 $compiles exp
 $type kind [initializer]

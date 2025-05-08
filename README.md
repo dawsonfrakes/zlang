@@ -51,26 +51,22 @@ using stb
 ## Builtins
 
 ```wisp
-; Declarations
-$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('PUBLIC | 'HOISTED | 'UNINITIALIZED | 'ZEROED)]
-$proc name params return [#callconv 'DEFAULT] [#flags ('PUBLIC | 'HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
-
-; Code modification
+; Implemented
 $codeof exp ; alias: 'exp
-$insert string ... [#flags ('HOISTED)]
-$compiles exp
 
-; Type system
+; Partially Implemented
+$define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('PUBLIC | 'HOISTED | 'UNINITIALIZED | 'ZEROED)]
+$insert string ... [#flags ('HOISTED)]
+
+; Coming Soon
+$proc name params return [#callconv 'DEFAULT] [#flags ('PUBLIC | 'HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
+$compiles exp
 $type kind [initializer]
 $cast type value
 $typeof exp
-
-; Control Flow
 $if test conseq [alt]
 $loop condition ... [#label exp]
 $goto [#label exp] [#result exp] [#kind ('BREAK | 'CONTINUE | 'RETURN)]
-
-; Misc
 $operator op ... ; op = "==", "<=", ">=", "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!.=<>"
 $import string [#kind ('MODULE | 'FILE)]
 $compiler ; compiler info struct (path, build target, command line, module paths, etc.)

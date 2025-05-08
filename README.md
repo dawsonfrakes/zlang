@@ -24,7 +24,7 @@ python zc.py your_main_file.z
 
 ```wisp
 ; note: stb-syntax module isn't special, you can write your own syntaxes using builtins
-$define stb ($import "stb-syntax") ; using, ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
+$define stb ($import "stb-syntax") ; using, ::, :, :=, [:], -, *, >=, assert, cast, proc, void, u8, *u8, []u8
 using stb
 
 :: intrinsics ($import "intrinsics")

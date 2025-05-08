@@ -2,6 +2,7 @@ package zc
 
 import "core:os"
 import "core:fmt"
+import "core:strconv"
 import "core:unicode"
 import "core:path/filepath"
 
@@ -67,11 +68,11 @@ parse_exp :: proc(s: string, p: int, filename := "") -> (^Exp, int) {
       append(&stack, exp)
     } else if s[p] == ')' {
       p += 1
-      if len(level_stack) <= 0 do fmt.panicf("%s:=%d Unexpected )", filename, start)
+      if len(level_stack) <= 0 do fmt.panicf("%s:=%d Unexpected ).\n", filename, start)
 
       idx := len(level_stack) - 1
       for idx >= 0 && level_stack[idx] do idx -= 1
-      if idx < 0 do fmt.panicf("%s:=%d Unmatched )", filename, start)
+      if idx < 0 do fmt.panicf("%s:=%d Unmatched ).\n", filename, start)
 
       for i := len(level_stack) - 1; i >= idx; i -= 1 {
         pop(&level_stack)
@@ -120,7 +121,7 @@ parse_exp :: proc(s: string, p: int, filename := "") -> (^Exp, int) {
 
     if len(level_stack) == 0 do break
   }
-  if len(level_stack) != 0 do fmt.panicf("%s:=%d Missing )", filename, p)
+  if len(level_stack) != 0 do fmt.panicf("%s:=%d Missing ).\n", filename, p)
   assert(len(stack) <= 1)
   return pop(&stack) if len(stack) > 0 else nil, p
 }
@@ -267,6 +268,7 @@ Type :: struct {
 
 type_code: ^Type
 type_void: ^Type
+type_bool: ^Type
 type_comptime_int: ^Type
 type_comptime_float: ^Type
 type_u8: ^Type
@@ -283,6 +285,7 @@ Value_Kind :: enum {
   EXP,
   TYPE,
   PROCEDURE,
+  COMPTIME_INTEGER,
 }
 
 Value :: struct {
@@ -292,10 +295,13 @@ Value :: struct {
     as_exp: ^Exp,
     as_type: ^Type,
     as_procedure: proc "c" (..^Value) -> ^Value,
+    as_comptime_int: int,
   },
 }
 
 value_void: ^Value
+value_true: ^Value
+value_false: ^Value
 
 Env_Entry :: struct {
   constant: bool,
@@ -312,6 +318,21 @@ env_find :: proc(env: ^Env, key: string) -> ^Env_Entry {
   if key in env.table do return &env.table[key]
   if env.parent != nil do return env_find(env.parent, key)
   return nil
+}
+
+is_truthy :: proc(value: ^Value, filename: string, loc: int) -> bool {
+  if value.type.kind == .BOOL do return value != value_false
+  fmt.panicf("%s:=%d I don't know how to tell if %s is truthy.\n", filename, loc, value.kind)
+}
+
+is_equal :: proc(a, b: ^Value, filename: string, loc: int) -> bool {
+  if a.kind == .EXP && b.kind == .EXP {
+    if a.as_exp.kind == .INTEGER && b.as_exp.kind == .INTEGER {
+      return strconv.atoi(a.as_exp.as_atom) == strconv.atoi(b.as_exp.as_atom)
+    }
+    fmt.panicf("%s:=%d I don't know how to compare %s == %s.\n", filename, loc, a.as_exp.kind, b.as_exp.kind)
+  }
+  fmt.panicf("%s:=%d I don't know how to compare %s == %s.\n", filename, loc, a.kind, b.kind)
 }
 
 eval_exp :: proc(x: ^Exp, env: ^Env, filename: string) -> ^Value {
@@ -347,32 +368,71 @@ eval_exp :: proc(x: ^Exp, env: ^Env, filename: string) -> ^Value {
     case .ARRAY:
       op_exp, arg_exps := x.as_array[0], x.as_array[1:]
       if op_exp.kind == .IDENTIFIER {
-        if op_exp.as_atom == "$define" {
-          if len(arg_exps) != 2 do fmt.panicf("%s:=%d $define expects two arguments (for now).\n", filename, op_exp.loc)
-          name_exp, value_exp := arg_exps[0], arg_exps[1]
-          name := eval_exp(name_exp, env, filename)
-          if name.kind != .EXP || name.as_exp.kind != .IDENTIFIER do fmt.panicf("%s:=%d I expected an identifier as the first argument to $define. Maybe you forgot to quote it?\n", filename, name_exp.loc)
-          if name.as_exp.as_atom in env.table do fmt.panicf("%s:=%d There's already a $define in this environment named %s.\n", filename, name_exp.loc, name.as_exp.as_atom)
-          env.table[name.as_exp.as_atom] = {constant = true, public = false, value = eval_exp(value_exp, env, filename)}
-          return value_void
-        }
-        if op_exp.as_atom == "$codeof" {
-          if len(arg_exps) != 1 do fmt.panicf("%s:=%d $codeof expects one argument.\n", filename, op_exp.loc)
-          value := new(Value)
-          value.type = type_code
-          value.kind = .EXP
-          value.as_exp = arg_exps[0]
-          return value
-        }
-        if op_exp.as_atom == "$insert" {
-          if len(arg_exps) != 1 do fmt.panicf("%s:=%d $insert expects one argument (for now).\n", filename, op_exp.loc)
-          arg := eval_exp(arg_exps[0], env, filename)
-          if arg.kind != .EXP || arg.type.kind != .CODE do fmt.panicf("%s:=%d I expected code as the first parameter but received %s instead.\n", filename, op_exp.loc, arg.kind)
-          return eval_exp(arg.as_exp, env, filename)
+        switch op_exp.as_atom {
+          case "$define":
+            if len(arg_exps) != 2 do fmt.panicf("%s:=%d $define expects two arguments (for now).\n", filename, op_exp.loc)
+            name_exp, value_exp := arg_exps[0], arg_exps[1]
+            name := eval_exp(name_exp, env, filename)
+            if name.kind != .EXP || name.as_exp.kind != .IDENTIFIER do fmt.panicf("%s:=%d I expected an identifier as the first argument to $define. Maybe you forgot to quote it?\n", filename, name_exp.loc)
+            if name.as_exp.as_atom in env.table do fmt.panicf("%s:=%d There's already a $define in this environment named %s.\n", filename, name_exp.loc, name.as_exp.as_atom)
+            env.table[name.as_exp.as_atom] = {constant = true, public = false, value = eval_exp(value_exp, env, filename)}
+            return value_void
+          case "$codeof":
+            if len(arg_exps) != 1 do fmt.panicf("%s:=%d $codeof expects one argument.\n", filename, op_exp.loc)
+            value := new(Value)
+            value.type = type_code
+            value.kind = .EXP
+            value.as_exp = arg_exps[0]
+            return value
+          case "$insert":
+            if len(arg_exps) != 1 do fmt.panicf("%s:=%d $insert expects one argument (for now).\n", filename, op_exp.loc)
+            arg := eval_exp(arg_exps[0], env, filename)
+            if arg.kind != .EXP || arg.type.kind != .CODE do fmt.panicf("%s:=%d I expected code as the first parameter but received %s instead.\n", filename, op_exp.loc, arg.kind)
+            return eval_exp(arg.as_exp, env, filename)
+          case "$operator":
+            if len(arg_exps) < 1 do fmt.panicf("%s:=%d $operator requires an operator identifier as its first argument.\n", filename, op_exp.loc)
+            operator := eval_exp(arg_exps[0], env, filename)
+            if operator.kind != .EXP || operator.type.kind != .CODE do fmt.panicf("%s:=%d I expected code as the operator but received %s instead.\n", filename, op_exp.loc, operator.kind)
+            rest := arg_exps[1:]
+            value := new(Value)
+            switch operator.as_exp.as_atom {
+              case "+":
+                value.type = type_comptime_int
+                value.kind = .COMPTIME_INTEGER
+                value.as_comptime_int = 0
+                for arg_exp in rest {
+                  arg := eval_exp(arg_exp, env, filename)
+                  if arg.type.kind != .COMPTIME_INTEGER do fmt.panicf("%s:=%d Non-comptime-int calculations unimplemented.\n", filename, op_exp.loc)
+                  value.as_comptime_int += strconv.atoi(arg.as_exp.as_atom)
+                }
+              case "*":
+                value.type = type_comptime_int
+                value.kind = .COMPTIME_INTEGER
+                value.as_comptime_int = 1
+                for arg_exp in rest {
+                  arg := eval_exp(arg_exp, env, filename)
+                  if arg.type.kind != .COMPTIME_INTEGER do fmt.panicf("%s:=%d Non-comptime-int calculations unimplemented.\n", filename, op_exp.loc)
+                  value.as_comptime_int *= strconv.atoi(arg.as_exp.as_atom)
+                }
+              case "==":
+                result := true
+                cmp_arg := eval_exp(rest[0], env, filename)
+                for arg_exp in rest[1:] {
+                  arg := eval_exp(arg_exp, env, filename)
+                  result &&= is_equal(cmp_arg, arg, filename, operator.as_exp.loc)
+                }
+                value = value_true if result else value_false
+              case:
+                fmt.panicf("%s:=%d $operator %s is not supported (currently).\n", filename, operator.as_exp.loc, operator.as_exp.as_atom)
+            }
+            return value
+          case "$if":
+            test_exp, conseq_exp, alt_exp := arg_exps[0], arg_exps[1], arg_exps[2] if len(arg_exps) >= 2 else nil
+            return eval_exp(conseq_exp, env, filename) if is_truthy(eval_exp(test_exp, env, filename), filename, test_exp.loc) else (eval_exp(alt_exp, env, filename) if alt_exp != nil else value_void)
         }
       }
       proc_ := eval_exp(op_exp, env, filename)
-      if proc_.kind != .PROCEDURE do fmt.panicf("%s:=%d I expected a procedure as the first parameter but received %s instead.\n", filename, op_exp.loc, proc_.type)
+      if proc_.kind != .PROCEDURE do fmt.panicf("%s:=%d I expected a procedure as the first parameter but received %s instead.\n", filename, op_exp.loc, proc_.kind)
       args: [dynamic]^Value
       defer delete(args)
       for arg_exp in arg_exps do append(&args, eval_exp(arg_exp, env, filename))
@@ -388,25 +448,29 @@ print_value :: proc(value: ^Value) {
     case .EXP: print_exp(value.as_exp)
     case .TYPE: print_type(value.as_type)
     case .PROCEDURE: fmt.panicf("Unimplemented\n")
+    case .COMPTIME_INTEGER: fmt.printf("%d", value.as_comptime_int)
   }
 }
 
 main :: proc() {
   if len(os.args) == 0 do fmt.panicf("I expected there to be at least one argument.\n")
-  if len(os.args) == 1 do fmt.panicf("Please provide me a file to compile, like this: %s your_main_file.z", filepath.base(os.args[0]))
+  if len(os.args) == 1 do fmt.panicf("Please provide me a file to compile, like this: %s your_main_file.z\n", filepath.base(os.args[0]))
 
   filename := os.args[1]
   src, success := os.read_entire_file(filename)
-  if !success do fmt.panicf("I failed to read '%s' from your drive. Maybe you need to quote the entire path?", filename)
+  if !success do fmt.panicf("I failed to read '%s' from your drive. Maybe you need to quote the entire path?\n", filename)
 
   type_code = &{kind = .CODE}
   type_void = &{kind = .VOID}
+  type_bool = &{kind = .BOOL}
   type_comptime_int = &{kind = .COMPTIME_INTEGER}
   type_comptime_float = &{kind = .COMPTIME_FLOAT}
   type_u8 = &{kind = .INTEGER, as_integer = {bits = 8, signed = false}}
   type_slice_u8 = &{kind = .POINTER, as_pointer = {kind = .SLICE, child = type_u8}}
 
   value_void = &{type = type_void}
+  value_true = &{type = type_bool}
+  value_false = &{type = type_bool}
 
   env: Env
   pos := 0

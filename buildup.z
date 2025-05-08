@@ -1,3 +1,4 @@
 $define 'x 5
 $insert '5
-$insert '($define 'y 6)
+$insert '($define 'y ($operator '* x x))
+$if ($operator '== x 5) 1 2

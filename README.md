@@ -14,17 +14,13 @@
 ## Compiling
 
 ```sh
-# windows (Developer Command Prompt for Visual Studio)
-cl zc.c
-zc your_main_file.z
-# unix-y
-cc -o zc zc.c && ./zc your_main_file.z
+odin run . -- your_main_file.z
 ```
 
 ## Example
 
 ```wisp
-; (note: stb-syntax module isn't special, you can write your own syntaxes using builtins)
+; note: stb-syntax module isn't special, you can write your own syntaxes using builtins
 $define stb ($import "stb-syntax") ; using, ::, :, :=, [:], -, *, >=, proc, void, u8, *u8, []u8
 using stb
 
@@ -53,21 +49,22 @@ using stb
 ```wisp
 ; Implemented
 $codeof exp ; alias: 'exp
+$if test conseq [alt]
 
 ; Partially Implemented
 $define name exp [#kind ('CONSTANT | 'VARIABLE)] [#flags ('PUBLIC | 'HOISTED | 'UNINITIALIZED | 'ZEROED)]
 $insert string ... [#flags ('HOISTED)]
+$operator op ... ; op = "==", "<=", ">=", "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!.=<>"
 
 ; Coming Soon
 $proc name params return [#callconv 'DEFAULT] [#flags ('PUBLIC | 'HOISTED | 'ENTRY | 'EXPORT | 'VARARGS)] ...body
+$rest
 $compiles exp
 $type kind [initializer]
 $cast type value
 $typeof exp
-$if test conseq [alt]
 $loop condition ... [#label exp]
-$goto [#label exp] [#result exp] [#kind ('BREAK | 'CONTINUE | 'RETURN)]
-$operator op ... ; op = "==", "<=", ">=", "&&", "||", "<<", ">>", ">>>", or in "+-*/%~&|^!.=<>"
+$break [#label exp] [#result exp] [#kind ('BREAK | 'CONTINUE | 'RETURN)]
 $import string [#kind ('MODULE | 'FILE)]
 $compiler ; compiler info struct (path, build target, command line, module paths, etc.)
 ```

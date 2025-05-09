@@ -165,16 +165,258 @@ print_code :: proc(code: ^Code) {
   }
 }
 
+Type_Kind :: enum {
+  TYPE,
+  CODE,
+  VOID,
+  NORETURN,
+  BOOL,
+  COMPTIME_INTEGER,
+  COMPTIME_FLOAT,
+  INTEGER,
+  FLOAT,
+  POINTER,
+  ARRAY,
+  STRUCT,
+  UNION,
+  // ENUM, // NOTE(dfra): probably better to just handle enums (and enum_flags) in userspace.
+  PROCEDURE,
+  NULL,
+}
+
+Type_Integer :: struct {
+  bits: u8,
+  signed: bool,
+}
+
+Type_Pointer_Kind :: enum {
+  SINGLE,
+  MANY,
+  SLICE,
+}
+
+Type_Pointer :: struct {
+  kind: Type_Pointer_Kind,
+  child: ^Type,
+  sentinel: rawptr,
+}
+
+Type_Array_Kind :: enum {
+  STATIC,
+  DYNAMIC,
+}
+
+Type_Array :: struct {
+  kind: Type_Array_Kind,
+  child: ^Type,
+  count: uint,
+  sentinel: rawptr,
+}
+
+Type_Struct :: struct {
+  field_names: []string,
+  field_types: []^Type,
+}
+
+Type_Union :: struct {
+  field_names: []string,
+  field_types: []^Type,
+  tag: ^Type,
+}
+
+Type_Procedure_Calling_Convention :: enum {
+  DEFAULT,
+  Z,
+  C,
+}
+
+Type_Procedure :: struct {
+  parameter_types: []^Type,
+  return_type: ^Type,
+  callconv: Type_Procedure_Calling_Convention,
+}
+
+Type :: struct {
+  kind: Type_Kind,
+  using data: struct #raw_union {
+    as_integer: Type_Integer,
+    as_pointer: Type_Pointer,
+    as_array: Type_Array,
+    as_struct: Type_Struct,
+    as_union: Type_Union,
+    as_procedure: Type_Procedure,
+  },
+}
+
+Value :: struct {
+  type: ^Type,
+  using data: struct #raw_union {
+    as_code: ^Code,
+    as_type: ^Type,
+    as_integer: int,
+    as_float: f64,
+    as_string: string,
+    as_procedure: proc(..^Value) -> ^Value,
+  },
+}
+
+Env_Entry :: struct {
+  constant: bool,
+  public: bool,
+  value: ^Value,
+}
+
+Env :: struct {
+  parent: ^Env,
+  table: map[string]Env_Entry,
+}
+
+env_find :: proc(env: ^Env, key: string) -> ^Env_Entry {
+  if key in env.table do return &env.table[key]
+  if env.parent != nil do return env_find(env, key)
+  return nil
+}
+
+type_code: ^Type
+type_bool: ^Type
+type_comptime_int: ^Type
+type_comptime_float: ^Type
+type_u8: ^Type
+type_slice_u8: ^Type
+type_procedures: map[string]Type
+value_keywords: map[string]Value
+value_void: ^Value
+
+eval_code :: proc(code: ^Code, env: ^Env, filename := "") -> ^Value {
+  switch code.kind {
+    case .IDENTIFIER:
+      value := env_find(env, code.as_atom)
+      if value == nil do fmt.panicf("%s:=%d Failed to find '%s' in the environment.\n", filename, code.loc, code.as_atom)
+      return value.value
+    case .KEYWORD:
+      if !(code.as_atom in value_keywords) do value_keywords[code.as_atom] = {type = type_code, as_code = code}
+      return &value_keywords[code.as_atom]
+    case .INTEGER:
+      value := new(Value)
+      value.type = type_comptime_int
+      value.as_integer = strconv.atoi(code.as_atom)
+      return value
+    case .FLOAT:
+      value := new(Value)
+      value.type = type_comptime_float
+      value.as_float = strconv.atof(code.as_atom)
+      return value
+    case .STRING:
+      value := new(Value)
+      value.type = type_slice_u8
+      value.as_string = code.as_atom
+      return value
+    case .ARRAY:
+      op_code, arg_codes := code.as_array[0], code.as_array[1:]
+      if op_code.kind == .IDENTIFIER {
+        switch op_code.as_atom {
+          case "$constant":
+            if len(arg_codes) != 2 do fmt.panicf("%s:=%d $constant expects exactly two arguments (for now).\n", filename, op_code.loc)
+            name_code, value_code := arg_codes[0], arg_codes[1]
+            name := eval_code(name_code, env, filename)
+            if name.type.kind != .CODE || name.as_code.kind != .IDENTIFIER do fmt.panicf("%s:=%d $constant expects argument one to be a valid identifier.\n", filename, name_code.loc)
+            if name.as_code.as_atom in env.table do fmt.panicf("%s:=%d Attempted to redefine '%s' in the same scope.\n", filename, name.as_code.loc, name.as_code.as_atom)
+            env.table[name.as_code.as_atom] = {constant = true, public = false, value = eval_code(value_code, env, filename)}
+            return value_void
+          case "$proc":
+            name_code, parameter_type_codes, return_type_code, rest := arg_codes[0], arg_codes[1], arg_codes[2], arg_codes[3:]
+            name := eval_code(name_code, env, filename)
+            if name.type.kind != .CODE || name.as_code.kind != .IDENTIFIER do fmt.panicf("%s:=%d $proc expects argument one to be a valid identifier.\n", filename, name_code.loc)
+            if name.as_code.as_atom in env.table do fmt.panicf("%s:=%d Attempted to redefine '%s' in the same scope.\n", filename, name.as_code.loc, name.as_code.as_atom)
+            value := new(Value)
+            if !("()" in type_procedures) do type_procedures["()"] = {kind = .PROCEDURE}
+            value.type = &type_procedures["()"]
+            value.as_procedure = proc(..^Value) -> ^Value { return nil }
+            env.table[name.as_code.as_atom] = {constant = true, public = false, value = value}
+            return value_void
+          case "$code-of":
+            if len(arg_codes) != 1 do fmt.panicf("%s:=%d $code-of expects exactly one argument.\n", filename, op_code.loc)
+            value := new(Value)
+            value.type = type_code
+            value.as_code = arg_codes[0]
+            return value
+          case "$operator":
+            if len(arg_codes) < 1 do fmt.panicf("%s:=%d $operator expects at least one argument (the operator).\n", filename, op_code.loc)
+            operator := eval_code(arg_codes[0], env, filename)
+            if operator.type.kind != .CODE || operator.as_code.kind != .IDENTIFIER do fmt.panicf("%s:=%d $operator expects argument one to be a valid identifier.\n", filename, arg_codes[0].loc)
+            switch operator.as_code.as_atom {
+              case "*":
+                value := new(Value)
+                value.type = type_comptime_int
+                value.as_integer = 1
+                for arg_code in arg_codes[1:] {
+                  arg := eval_code(arg_code, env, filename)
+                  if arg.type != type_comptime_int do fmt.panicf("%s:=%d * only supports comptime-int multiplication (for now).\n", filename, op_code.loc)
+                  value.as_integer *= arg.as_integer
+                }
+                return value
+              case:
+                fmt.panicf("%s:=%d $operator doesn't support op '%' (for now).", filename, arg_codes[0].loc, operator.as_code.as_atom)
+            }
+        }
+      }
+      proc_ := eval_code(op_code, env, filename)
+      if proc_.type.kind != .PROCEDURE do fmt.panicf("%s:=%d You tried to call a non-procedure.\n", filename, op_code.loc)
+      pargs: [dynamic]^Value
+      defer delete(pargs)
+      for arg_code in arg_codes do append(&pargs, eval_code(arg_code, env, filename))
+      return proc_.as_procedure(..pargs[:])
+  }
+  assert(false, "How did we get here? (compiler bug)")
+  return nil
+}
+
+print_value :: proc(value: ^Value) {
+  #partial switch value.type.kind {
+    case .CODE:
+      print_code(value.as_code)
+    case .COMPTIME_INTEGER:
+      fmt.printf("%d", value.as_integer)
+    case .PROCEDURE:
+      fmt.printf("proc")
+    case:
+      fmt.print("Unimplemented")
+  }
+}
+
 main :: proc() {
+  type_code = &{kind = .CODE}
+  type_bool = &{kind = .BOOL}
+  type_comptime_int = &{kind = .COMPTIME_INTEGER}
+  type_comptime_float = &{kind = .COMPTIME_FLOAT}
+  type_u8 = &{kind = .INTEGER, as_integer = {bits = 8, signed = false}}
+  type_slice_u8 = &{kind = .POINTER, as_pointer = {kind = .SLICE, child = type_u8}}
+
+  value_void = &{type = type_bool}
+
   if len(os.args) == 1 do fmt.panicf("no file given. usage: odin run . -- your_file.z\n")
+
   src, success := os.read_entire_file(os.args[1])
   if !success do fmt.panicf("file '%s' wasn't found.\n", os.args[1])
   pos := 0
+  env: Env
   for {
     code, next_pos := parse_code(string(src), pos, os.args[1])
     if code == nil do break
     pos = next_pos
-    print_code(code)
+    // print_code(code)
+    // fmt.println()
+    result := eval_code(code, &env, os.args[1])
+    if result != value_void {
+      print_value(result)
+      fmt.println()
+    }
+  }
+
+  fmt.println("=====ENVIRONMENT=====")
+  for key, value in env.table {
+    fmt.printf("%s: ", key)
+    print_value(env.table[key].value)
     fmt.println()
   }
 }

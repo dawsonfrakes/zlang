@@ -1,6 +1,6 @@
-using (import "intrinsics")
+;$constant 'intrinsics ($import "intrinsics")
 
-:: WASM_PAGE_SIZE (* 64 1024)
-:: TEMPORARY_PAGE_SIZE (* 16 1024)
+$constant 'WASM_PAGE_SIZE ($operator '* 64 1024)
+$constant 'TEMPORARY_PAGE_SIZE ($operator '* 16 1024)
 
-proc _start () void #callconv 'C
+$proc '_start '() ($type 'VOID) #callconv 'C

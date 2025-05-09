@@ -1,6 +1,0 @@
-;$constant 'intrinsics ($import "intrinsics")
-
-$constant 'WASM_PAGE_SIZE ($operator '* 64 1024)
-$constant 'TEMPORARY_PAGE_SIZE ($operator '* 16 1024)
-
-$proc '_start '() ($type 'VOID) #callconv 'C

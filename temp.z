@@ -1,0 +1,6 @@
+using (import "intrinsics")
+
+:: WASM_PAGE_SIZE (* 64 1024)
+:: TEMPORARY_PAGE_SIZE (* 16 1024)
+
+proc _start () void #callconv 'C
